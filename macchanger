@@ -1,0 +1,1 @@
+macchanger 随即改变mac地址，使用时请加上接口名称 如 sh macchanger.sh wlan0

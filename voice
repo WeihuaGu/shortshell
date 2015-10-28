@@ -1,1 +1,2 @@
-voice 可以进行语音朗读，参数是要朗读的文字，例如 sh voice.sh ‘你好，语音voice'。
+voice 可以进行在线语音朗读，参数是要朗读的文字，例如 sh voice.sh ‘你好，语音voice'。
+使用的是百度语音api，注意如果token过期，请在重新申请。

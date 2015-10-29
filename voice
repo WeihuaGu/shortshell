@@ -1,2 +1,7 @@
-voice 可以进行在线语音朗读，参数是要朗读的文字，例如 sh voice.sh ‘你好，语音voice'。
-使用的是百度语音api，注意如果token过期，请在重新申请。
+#! /bin/sh
+urltemp="http://tsn.baidu.com/text2audio?lan=zh&cuid=a1b2c3d4ee&ctp=1&tok=24.2d817d1a3417357c4d5f52ce77d60bd1.2592000.1448626807.282335-7144270&tex=";
+read -t 0 stdin; 
+sum=${stdin}$1;
+echo $sum;
+url=${urltemp}$sum;
+mplayer "$url" ;

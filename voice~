@@ -5,3 +5,4 @@ sum=${stdin}$1;
 echo $sum;
 url=${urltemp}$sum;
 mplayer "$url" ;
+voice 还可以使用标准输入与参数结合的方法。 例如 echo "你好" | voice voice 

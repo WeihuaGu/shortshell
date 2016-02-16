@@ -1,0 +1,10 @@
+wget https://raw.githubusercontent.com/racaljk/hosts/master/hosts -qO /tmp/hosts
+username=`whoami`
+echo "127.0.0.1	$username" >> /tmp/hosts
+if
+diff /tmp/hosts /etc/hosts
+then
+exit 1
+fi
+sudo mv /tmp/hosts /etc/
+exit 0

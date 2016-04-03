@@ -1,0 +1,5 @@
+mac='12:34:aa:67:87:';
+mac=$mac`date '+%d' ` ;
+echo $mac;
+echo $mac > /sys/devices/fb000000.qcom,wcnss-wlan/wcnss_mac_addr ;
+cat /sys/devices/fb000000.qcom,wcnss-wlan/wcnss_mac_addr;

@@ -1,0 +1,12 @@
+mount -o rw,remount /system
+tmppath="/sdcard/tmp"
+cd $tmppath
+curl -O https://raw.githubusercontent.com/racaljk/hosts/master/hosts 
+if
+diff $tmppath/hosts /system/etc/hosts
+then
+exit 1
+fi
+mv $tmppath/hosts /system/etc/
+chmod a+r /system/etc/hosts
+exit 0

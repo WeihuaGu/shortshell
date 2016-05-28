@@ -1,5 +1,15 @@
-mac='12:34:aa:67:87:';
-mac=$mac`date '+%d' ` ;
+mac='';
+mac=$mac`date '+%d' `:; 
+mac=$mac`date '+%H' `:; 
+mac=$mac`date '+%M' `:;
+mac=$mac`date '+%M' `:;
+min=`date '+%M'`;
+hour=`date '+%H'`;
+let temp=min-hour+70;
+let tem=temp+1;
+mac=$mac$temp:$tem;
 echo $mac;
 echo $mac > /sys/devices/fb000000.qcom,wcnss-wlan/wcnss_mac_addr ;
 cat /sys/devices/fb000000.qcom,wcnss-wlan/wcnss_mac_addr;
+
+

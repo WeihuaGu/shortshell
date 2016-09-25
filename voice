@@ -1,2 +1,18 @@
-voice 利用了百度的在线TTS 可以读出标准输入与参数的内容。
-voice 还可以使用标准输入与参数结合的方法。 例如 echo "你好" | voice 'voice.' 会读出你好voice. 
+#! /bin/bash
+gettoken="https://openapi.baidu.com/oauth/2.0/token?grant_type=client_credentials&client_id=EYvPEFPLBCjfG2ytCgax5v94&client_secret=82debf49fcfa628f5fe3fac69690ef48&"
+
+urltemp='http://tsn.baidu.com/text2audio?lan=zh&cuid=a1b2c3d4ee&ctp=1&tok=24.69e92eb752bee0dd50ecc0de382b2a49.2592000.1477314235.282335-7144270&tex=';
+
+echo ''> /tmp/voicestdin
+while read stdinline
+do
+	echo -n $stdinline >> /tmp/voicestdin
+done
+
+stdin=`cat /tmp/voicestdin`
+stdinurl=${urltemp}$stdin
+mplayer "$stdinurl"
+inputurl=${urltemp}$1
+mplayer "$inputurl"
+
+

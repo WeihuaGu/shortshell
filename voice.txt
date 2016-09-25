@@ -1,0 +1,2 @@
+voice 利用了百度的在线TTS 可以读出标准输入与参数的内容。
+voice 还可以使用标准输入与参数结合的方法。 例如 echo "你好" | voice 'voice.' 会读出你好voice. 

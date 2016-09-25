@@ -1,16 +1,23 @@
 #! /bin/bash
 gettoken="https://openapi.baidu.com/oauth/2.0/token?grant_type=client_credentials&client_id=EYvPEFPLBCjfG2ytCgax5v94&client_secret=82debf49fcfa628f5fe3fac69690ef48&"
 
-urltemp='http://tsn.baidu.com/text2audio?lan=zh&cuid=a1b2c3d4ee&ctp=1&tok=24.69e92eb752bee0dd50ecc0de382b2a49.2592000.1477314235.282335-7144270&tex=';
-
+urltemp='http://tsn.baidu.com/text2audio?lan=zh&cuid=a1b2c3d4ee&ctp=1&tok=24.69e92eb752bee0dd50ecc0de382b2a49.2592000.1477314235.282335-7144270&tex="';
+count=0
 echo ''> /tmp/voicestdin
 while read stdinline
 do
 	echo -n $stdinline >> /tmp/voicestdin
+	let count=$count+1
+	if [ $count -gt 40 ]
+	then
+		stdinurl=${urltemp}$stdinline'"'
+		sleep 3
+		mplayer "$stdinurl";
+	fi
 done
 
-stdin=`cat /tmp/voicestdin`
-stdinurl=${urltemp}$stdin
+stdin=`cat /tmp/voicestdin | dos2unix`
+stdinurl=${urltemp}$stdin'"'
 mplayer "$stdinurl"
 inputurl=${urltemp}$1
 mplayer "$inputurl"

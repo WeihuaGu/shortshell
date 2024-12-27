@@ -24,29 +24,33 @@ convert_video() {
         return 1
     fi
 
+    # 分辨率阈值
+    local threshold_1080p=$((1920 * 1080))
+    local threshold_720p=$((1280 * 720))
+
     bitrate=$(ffprobe -v error -select_streams v:0 -show_entries stream=bit_rate -of default=nw=1:nk=1 "$input_file")
     # 获取视频分辨率
     width=$(ffprobe -v error -select_streams v:0 -show_entries stream=width -of default=nw=1:nk=1 "$input_file")
     height=$(ffprobe -v error -select_streams v:0 -show_entries stream=height -of default=nw=1:nk=1 "$input_file")
     resolution=$((width * height))
 
-    if [ $resolution -ge 1920*1080 ]; then
+    if [ $resolution -ge $threshold_1080p ]; then
         threshold=8000
-    elif [ $resolution -ge 1280*720 ]; then
+    elif [ $resolution -ge $threshold_720p ]; then
         threshold=3500
     else
-        threshold=0
+        threshold=2500
     fi
 
-    if [ -n "$bitrate" ]; then
+    if [[ "$bitrate" =~ ^[0-9]+$ ]]; then
         # 将码率转换为kbps
         bitrate_kbps=$((bitrate / 1000))
 
         if [ $bitrate_kbps -le $threshold ]; then
-            echo "视频 $input_file 的码率为 $bitrate_kbps kbps，低于 8000k，不进行转换。"
+            echo "视频 $input_file 的码率为 $bitrate_kbps kbps，低于${threshold}k，不进行转换。"
 	    return 1
         else
-            echo "视频 $input_file 的码率为 $bitrate_kbps kbps，高于 8000k，需要进行转换。"
+            echo "视频 $input_file 的码率为 $bitrate_kbps kbps，高于${threshold}k，需要进行转换。"
         fi
     else
         echo "无法获取视频 $input_file 的码率。"
@@ -71,6 +75,7 @@ elif [ -f "$input_path" ]; then
     # 传入的是文件，直接转换该文件
     convert_video "$input_path"
 else
+    echo "$input_path"
     echo "输入的路径既不是文件夹也不是文件。"
     exit 1
 fi

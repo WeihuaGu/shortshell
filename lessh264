@@ -1,0 +1,76 @@
+#!/bin/bash
+
+# 检查是否提供了正确的参数个数（需要一个文件夹路径参数）
+if [ $# -ne 1 ]; then
+    echo "Usage: $0 <folder_path>"
+    exit 1
+fi
+
+# 定义输入路径
+input_path="$1"
+
+# 递归查找所有.h264后缀的视频文件的函数
+find_h264_files() {
+    find "$1" -type f \( -name "*.mp4" -o -name "*.mkv" -o -name "*.avi" -o -name "*.mov" \) -exec sh -c 'ffmpeg -i "$0" 2>&1 | grep -q "Video: h264"' {} \; -print
+}
+
+# 转换单个视频文件的函数
+convert_video() {
+    local input_file="$1"
+    local output_file="${input_file%.*}_converted.${input_file##*.}"  # 在原文件名基础上添加_converted后缀，保持原文件扩展名
+    local hwaccel_used=""
+    if [ -e "$output_file" ]; then
+        echo "Skipping conversion for $input_file as converted file $output_file already exists."
+        return 1
+    fi
+
+    bitrate=$(ffprobe -v error -select_streams v:0 -show_entries stream=bit_rate -of default=nw=1:nk=1 "$input_file")
+    # 获取视频分辨率
+    width=$(ffprobe -v error -select_streams v:0 -show_entries stream=width -of default=nw=1:nk=1 "$input_file")
+    height=$(ffprobe -v error -select_streams v:0 -show_entries stream=height -of default=nw=1:nk=1 "$input_file")
+    resolution=$((width * height))
+
+    if [ $resolution -ge 1920*1080 ]; then
+        threshold=8000
+    elif [ $resolution -ge 1280*720 ]; then
+        threshold=3500
+    else
+        threshold=0
+    fi
+
+    if [ -n "$bitrate" ]; then
+        # 将码率转换为kbps
+        bitrate_kbps=$((bitrate / 1000))
+
+        if [ $bitrate_kbps -le $threshold ]; then
+            echo "视频 $input_file 的码率为 $bitrate_kbps kbps，低于 8000k，不进行转换。"
+	    return 1
+        else
+            echo "视频 $input_file 的码率为 $bitrate_kbps kbps，高于 8000k，需要进行转换。"
+        fi
+    else
+        echo "无法获取视频 $input_file 的码率。"
+	return 1
+    fi
+
+
+    hwaccel_used="vaapi"
+    ffmpeg -hwaccel "$hwaccel_used" -hwaccel_output_format "$hwaccel_used" -i "$input_file" -c:v h264_$hwaccel_used -qp 23 -threads 3 "$output_file"
+    echo "Converted: $input_file -> $output_file"
+
+}
+
+# 主逻辑：判断传入的是文件夹还是文件
+if [ -d "$input_path" ]; then
+    # 传入的是文件夹，查找所有.h264文件，然后逐个进行转换
+    h264_files=$(find_h264_files "$input_path")
+    for file in $h264_files; do
+        convert_video "$file"
+    done
+elif [ -f "$input_path" ]; then
+    # 传入的是文件，直接转换该文件
+    convert_video "$input_path"
+else
+    echo "输入的路径既不是文件夹也不是文件。"
+    exit 1
+fi

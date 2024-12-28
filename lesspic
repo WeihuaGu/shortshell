@@ -1,0 +1,29 @@
+#!/bin/bash
+
+# 检查是否提供了文件夹路径作为参数
+if [ $# -ne 1 ]; then
+    echo "Usage: $0 <folder_path>"
+    exit 1
+fi
+
+folder_path="$1"
+
+# 检查文件夹是否存在
+if [ ! -d "$folder_path" ]; then
+    echo "The specified folder does not exist."
+    exit 1
+fi
+
+# 递归遍历文件夹及其子文件夹
+image_files=$(find "$folder_path" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" \))
+# 遍历找到的图片文件
+for file in $image_files; do
+    file_size=$(stat -c%s "$file")
+    if [ "$file_size" -gt 2097152 ]; then
+	temp_file=$(mktemp)
+        convert "$file" -quality 75 "$temp_file"
+        mv "$temp_file" "$file"
+        echo "Compressed: $file"
+    fi
+done
+

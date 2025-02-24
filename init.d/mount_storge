@@ -1,0 +1,27 @@
+#!/bin/sh /etc/rc.common  
+# 脚本名称：mount_storge  
+  
+START=49
+  
+start() {  
+    echo "Mounting usb storge"
+    mount /dev/sda1 /mnt/storge
+    if [ $? -eq 0 ]; then  
+        echo "usb storge mounted successfully."  
+    else  
+        echo "Failed to mount usb storge."  
+        exit 1  
+    fi  
+}  
+  
+stop() {  
+    echo "Unmounting storge..."  
+    umount /mnt/storge
+    if [ $? -eq 0 ]; then  
+        echo "unmounted successfully."  
+    else  
+        echo "Failed to unmount."  
+        exit 1  
+    fi  
+}  
+

@@ -13,7 +13,7 @@ def gen_num(n):
         raise ValueError("位数必须大于等于1")
     
     return [str(i).zfill(n) for i in range(10**n)]
-def get_prefixes():
+def get_prefixes(operator=None):
     """
     返回中国所有手机号段（截至2024年）
     包含三大运营商和虚拟运营商的号段
@@ -42,22 +42,38 @@ def get_prefixes():
     mobile_cbn = [
         '192'
     ]
-    
-    # 合并所有号段
-    all_prefixes = mobile_cmcc + mobile_cucc + mobile_ctcc + mobile_cbn
+    # 运营商映射字典
+    operator_map = {
+        'cmcc': mobile_cmcc,
+        'cucc': mobile_cucc,
+        'ctcc': mobile_ctcc,
+        'cbn': mobile_cbn,
+        'all': mobile_cmcc + mobile_cucc + mobile_ctcc + mobile_cbn
+    }
+    if operator is None or operator.lower() == 'all':
+        all_prefixes = operator_map['all']
+    elif operator.lower() in operator_map:
+        all_prefixes = operator_map[operator.lower()]
+    else:
+        all_prefixes = operator_map['all']
+
     # 去重并排序
     all_prefixes = sorted(set(all_prefixes))
     return all_prefixes
 def main():
     # 创建参数解析器
     parser = argparse.ArgumentParser(description="""构建电话号码的字典 
-    典型用法：--last 2315
+    典型用法：
+        --last 2315
+        --oper cmcc
     """,formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--last', type=str, required=True, help="你知道号码以什么结尾")
+    parser.add_argument('--oper', type=str, required=False, help="运营商,全部all 移动cmcc 联通cucc 电信ctcc")
     args = parser.parse_args()
 
     # 将 last 附加到每个项目后面
-    prefixes = get_prefixes()
+    oper = args.oper
+    prefixes = get_prefixes(oper)
     last = args.last
     last_n = len(last)
     middle = gen_num(11-3-last_n)

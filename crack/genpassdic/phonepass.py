@@ -67,7 +67,7 @@ def main():
         --last 2315
         --oper cmcc
     """,formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--last', type=str, required=True, help="你知道号码以什么结尾")
+    parser.add_argument('--last', type=str, required=True, help="你知道号码以什么结尾,none表示你不知道以什么结尾")
     parser.add_argument('--oper', type=str, required=False, help="运营商,全部all 移动cmcc 联通cucc 电信ctcc")
     args = parser.parse_args()
 
@@ -75,7 +75,10 @@ def main():
     oper = args.oper
     prefixes = get_prefixes(oper)
     last = args.last
-    last_n = len(last)
+    if last == 'none':
+        last_n = 0
+    else:
+        last_n = len(last)
     middle = gen_num(11-3-last_n)
     last_list = [item + last for item in middle]
     phone_list = [x+y for x in prefixes for y in last_list]

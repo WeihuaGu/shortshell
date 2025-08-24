@@ -61,11 +61,11 @@ def main():
     last = args.last
     last_n = len(last)
     middle = gen_num(11-3-last_n)
-    head_list = [x+y for x in prefixes for y in middle]
-    modified_items = [item + last for item in head_list]
+    last_list = [item + last for item in middle]
+    phone_list = [x+y for x in prefixes for y in last_list]
 
     # 输出结果
-    print_list(modified_items)
+    print_list(phone_list)
 
 
 # 使用示例

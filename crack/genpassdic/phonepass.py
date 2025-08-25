@@ -70,6 +70,7 @@ def main():
     parser.add_argument('--last', type=str, required=True, help="你知道号码以什么结尾,none表示你不知道以什么结尾")
     parser.add_argument('--oper', type=str, required=False, help="运营商,全部all 移动cmcc 联通cucc 电信ctcc")
     parser.add_argument('--head', type=str, required=False, help="给手机号码传一个前缀")
+    parser.add_argument('--tail', type=str, required=False, help="给手机号码传一个后缀")
     args = parser.parse_args()
 
     # 将 last 附加到每个项目后面
@@ -77,7 +78,8 @@ def main():
     prefixes = get_prefixes(oper)
     head = args.head
     last = args.last
-    if head != 'none':
+    tail = args.tail
+    if head != None:
         head_list = [head + item for item in prefixes]
     else:
         head_list = prefixes
@@ -86,7 +88,11 @@ def main():
     else:
         last_n = len(last)
     middle = gen_num(11-3-last_n)
-    last_list = [item + last for item in middle]
+    if tail == None:
+        last_str = last
+    else:
+        last_str = last + tail
+    last_list = [item + last_str for item in middle]
     phone_list = [x+y for x in head_list for y in last_list]
 
     # 输出结果

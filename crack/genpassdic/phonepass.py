@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 import argparse
 
-def print_list(items):
-    for item in items:
-        print(item)
 def gen_num(n):
     """
     生成 n 位数字的所有组合，从 000...0 到 999...9
@@ -11,8 +8,9 @@ def gen_num(n):
     """
     if n < 1:
         raise ValueError("位数必须大于等于1")
-    
-    return [str(i).zfill(n) for i in range(10**n)]
+    for i in range(10**n):
+       yield str(i).zfill(n)
+
 def get_prefixes(operator=None):
     """
     返回中国所有手机号段（截至2024年）
@@ -60,6 +58,11 @@ def get_prefixes(operator=None):
     # 去重并排序
     all_prefixes = sorted(set(all_prefixes))
     return all_prefixes
+def cat_str(head_list,middle_n,last_str):
+    for head_item in head_list:
+        for middle_num in gen_num(middle_n):
+            yield head_item + middle_num + last_str
+
 def main():
     # 创建参数解析器
     parser = argparse.ArgumentParser(description="""构建电话号码的字典 
@@ -85,18 +88,19 @@ def main():
         head_list = prefixes
     if last == 'none':
         last_n = 0
+        last = ""
     else:
         last_n = len(last)
-    middle = gen_num(11-3-last_n)
+    middle_n = 11-3-last_n
     if tail == None:
         last_str = last
     else:
         last_str = last + tail
-    last_list = [item + last_str for item in middle]
-    phone_list = [x+y for x in head_list for y in last_list]
+    gen = cat_str(head_list,middle_n,last_str)
 
     # 输出结果
-    print_list(phone_list)
+    for phonestr in gen:
+        print(phonestr)
 
 
 # 使用示例

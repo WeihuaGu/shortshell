@@ -1,0 +1,226 @@
+"""
+Torrent Tracker 测试和清理脚本
+功能：测试torrent文件中的tracker服务器连接，删除无法连接的tracker
+需要：pip install bencodepy requests
+"""
+
+import bencodepy
+import requests
+import argparse
+import os
+import socket
+import urllib.parse
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
+
+class TorrentTrackerTester:
+    def __init__(self, timeout=10, max_workers=20):
+        self.timeout = timeout
+        self.max_workers = max_workers
+        self.session = requests.Session()
+        # 设置用户代理，避免被某些tracker拒绝
+        self.session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        })
+    
+    def parse_torrent_file(self, torrent_path):
+        """解析torrent文件，返回tracker列表和torrent数据"""
+        try:
+            with open(torrent_path, 'rb') as f:
+                torrent_data = bencodepy.decode(f.read())
+            
+            # 获取所有tracker
+            trackers = set()
+            
+            # 主announce
+            if b'announce' in torrent_data and torrent_data[b'announce']:
+                trackers.add(torrent_data[b'announce'].decode('utf-8', errors='ignore'))
+            
+            # announce-list (BEP 12)
+            if b'announce-list' in torrent_data:
+                for tracker_group in torrent_data[b'announce-list']:
+                    for tracker in tracker_group:
+                        trackers.add(tracker.decode('utf-8', errors='ignore'))
+            
+            return list(trackers), torrent_data
+        except Exception as e:
+            print(f"解析torrent文件失败: {e}")
+            return None, None
+    
+    def test_tracker(self, tracker_url):
+        """测试单个tracker的连接性"""
+        try:
+            # 解析URL获取主机和端口
+            parsed = urllib.parse.urlparse(tracker_url)
+            if not parsed.hostname:
+                return tracker_url, False, "无效的URL"
+            
+            # 首先尝试TCP连接（针对HTTP/HTTPS tracker）
+            port = parsed.port
+            if not port:
+                port = 80 if parsed.scheme == 'http' else 443 if parsed.scheme == 'https' else 6969
+            
+            # 测试TCP连接
+            with socket.create_connection((parsed.hostname, port), timeout=self.timeout):
+                pass
+            
+            # 对于HTTP/HTTPS tracker，发送一个简单的请求
+            if parsed.scheme in ['http', 'https']:
+                # 构建一个简单的announce请求
+                test_params = {
+                    'info_hash': '0' * 20,  # 假的信息哈希
+                    'peer_id': '-TEST00000000000000',
+                    'port': 6881,
+                    'uploaded': 0,
+                    'downloaded': 0,
+                    'left': 0,
+                    'compact': 1,
+                    'event': 'started'
+                }
+                
+                response = self.session.get(
+                    tracker_url, 
+                    params=test_params, 
+                    timeout=self.timeout,
+                    allow_redirects=False
+                )
+                
+                # 检查响应状态码，即使错误响应也说明服务器是活跃的
+                if response.status_code < 500:  # 5xx错误通常是服务器问题
+                    return tracker_url, True, f"HTTP {response.status_code}"
+                else:
+                    return tracker_url, False, f"HTTP错误: {response.status_code}"
+            
+            # 对于UDP tracker，这里只是测试了TCP连接
+            elif parsed.scheme == 'udp':
+                return tracker_url, True, "UDP连接成功"
+            
+            else:
+                return tracker_url, False, f"不支持的协议: {parsed.scheme}"
+                
+        except socket.timeout:
+            return tracker_url, False, "连接超时"
+        except ConnectionRefusedError:
+            return tracker_url, False, "连接被拒绝"
+        except Exception as e:
+            return tracker_url, False, f"错误: {str(e)}"
+    
+    def test_trackers(self, trackers):
+        """并发测试所有tracker"""
+        working_trackers = []
+        failed_trackers = []
+        
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            future_to_tracker = {
+                executor.submit(self.test_tracker, tracker): tracker 
+                for tracker in trackers
+            }
+            
+            for future in as_completed(future_to_tracker):
+                tracker = future_to_tracker[future]
+                try:
+                    result_tracker, is_working, message = future.result()
+                    if is_working:
+                        print(f"✓ {tracker} - 可用")
+                        working_trackers.append(tracker)
+                    else:
+                        print(f"✗ {tracker} - 不可用: {message}")
+                        failed_trackers.append(tracker)
+                except Exception as e:
+                    print(f"✗ {tracker} - 测试异常: {e}")
+                    failed_trackers.append(tracker)
+        
+        return working_trackers, failed_trackers
+    
+    def create_clean_torrent(self, original_data, working_trackers, output_path):
+        """创建清理后的torrent文件"""
+        try:
+            # 创建数据副本
+            new_data = original_data.copy()
+            
+            # 移除旧的announce和announce-list
+            if b'announce' in new_data:
+                del new_data[b'announce']
+            if b'announce-list' in new_data:
+                del new_data[b'announce-list']
+            
+            # 添加可用的tracker
+            if working_trackers:
+                # 设置第一个可用的tracker为主announce
+                new_data[b'announce'] = working_trackers[0].encode('utf-8')
+                
+                # 如果有多个tracker，添加到announce-list
+                if len(working_trackers) > 1:
+                    new_data[b'announce-list'] = [
+                        [tracker.encode('utf-8')] for tracker in working_trackers
+                    ]
+            
+            # 编码并写入新文件
+            encoded_data = bencodepy.encode(new_data)
+            with open(output_path, 'wb') as f:
+                f.write(encoded_data)
+            
+            return True
+        except Exception as e:
+            print(f"创建清理后的torrent文件失败: {e}")
+            return False
+
+def main():
+    parser = argparse.ArgumentParser(description='测试并清理torrent文件中的tracker服务器')
+    parser.add_argument('input', help='输入的torrent文件路径')
+    parser.add_argument('-o', '--output', help='输出的torrent文件路径（可选）')
+    parser.add_argument('-t', '--timeout', type=int, default=10, help='连接超时时间（秒，默认: 10）')
+    parser.add_argument('-w', '--workers', type=int, default=20, help='并发工作线程数（默认: 20）')
+    
+    args = parser.parse_args()
+    
+    # 检查输入文件
+    if not os.path.isfile(args.input):
+        print(f"错误: 文件 '{args.input}' 不存在")
+        return
+    
+    # 设置输出路径
+    if args.output:
+        output_path = args.output
+    else:
+        name, ext = os.path.splitext(args.input)
+        output_path = f"{name}_cleaned{ext}"
+    # 初始化测试器
+    tester = TorrentTrackerTester(timeout=args.timeout, max_workers=args.workers)
+    
+    # 解析torrent文件
+    print("解析torrent文件...")
+    trackers, torrent_data = tester.parse_torrent_file(args.input)
+    
+    if not trackers or not torrent_data:
+        print("无法解析torrent文件或文件中没有tracker")
+        return
+    
+    print(f"找到 {len(trackers)} 个tracker服务器")
+    
+    # 测试tracker
+    print("开始测试tracker服务器...")
+    start_time = time.time()
+    working_trackers, failed_trackers = tester.test_trackers(trackers)
+    elapsed_time = time.time() - start_time
+    
+    print(f"\n测试完成 (耗时: {elapsed_time:.2f}秒)")
+    print(f"可用的tracker: {len(working_trackers)}")
+    print(f"不可用的tracker: {len(failed_trackers)}")
+    
+    # 创建清理后的torrent文件
+    if working_trackers:
+        print("创建清理后的torrent文件...")
+        if tester.create_clean_torrent(torrent_data, working_trackers, output_path):
+            print(f"成功创建清理后的torrent文件: {output_path}")
+        else:
+            print("创建清理后的torrent文件失败")
+    else:
+        print("警告: 没有可用的tracker服务器，将创建无tracker的torrent文件")
+        if tester.create_clean_torrent(torrent_data, [], output_path):
+            print(f"成功创建无tracker的torrent文件: {output_path}")
+        else:
+            print("创建无tracker的torrent文件失败")
+
+if __name__ == "__main__":
+    main()

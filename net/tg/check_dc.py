@@ -1,76 +1,71 @@
 #!/usr/bin/env python3
-import os, socket, struct, sys, time
+import base64, os, socket, ssl, sys, time
 from concurrent.futures import ThreadPoolExecutor
 
 IN_FILE = "open_ips.txt"
-OUT_FILE = "dc_ips.txt"
-PORT = 443
-TIMEOUT = 4.0
-TRIES = 3
+OUT_FILE = "ws_ips.txt"
+FRONT_SNI = sys.argv[1] if len(sys.argv) > 1 else "cdn5.telesco.pe"
+TIMEOUT = 5.0
 WORKERS = 64
 
-
-def recv_exact(s, n):
-    buf = b""
-    while len(buf) < n:
-        chunk = s.recv(n - len(buf))
-        if not chunk:
-            raise ConnectionError("closed")
-        buf += chunk
-    return buf
+ctx = ssl.create_default_context()
+ctx.check_hostname = False
+ctx.verify_mode = ssl.CERT_NONE
 
 
-def mtproto_probe(ip):
-    """成功返回握手往返耗时(ms)，不是 DC 返回 None"""
-    nonce = os.urandom(16)
-    msg_id = (int(time.time() * 2**32)) & ~3
-    body = struct.pack("<I", 0xbe7e8ef1) + nonce          # req_pq_multi
-    payload = (b"\x00" * 8                                 # auth_key_id = 0
-               + struct.pack("<Q", msg_id)
-               + struct.pack("<I", len(body)) + body)
+def ws_probe(ip, n):
+    host = f"kws{n}.web.telegram.org"
+    key = base64.b64encode(os.urandom(16)).decode()
+    req = (f"GET /apiws HTTP/1.1\r\nHost: {host}\r\n"
+           "Upgrade: websocket\r\nConnection: Upgrade\r\n"
+           f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n"
+           "Sec-WebSocket-Protocol: binary\r\n"
+           "Origin: https://web.telegram.org\r\n\r\n").encode()
+    t = time.perf_counter()
     try:
-        with socket.create_connection((ip, PORT), timeout=TIMEOUT) as s:
-            s.settimeout(TIMEOUT)
-            s.sendall(b"\xee\xee\xee\xee")                 # intermediate transport
-            t = time.perf_counter()
-            s.sendall(struct.pack("<I", len(payload)) + payload)
-            length = struct.unpack("<I", recv_exact(s, 4))[0]
-            if not (20 <= length <= 4096):
-                return None
-            resp = recv_exact(s, length)
-            rtt = (time.perf_counter() - t) * 1000
-    except (OSError, ConnectionError):
-        return None
-    # auth_key_id(8) + msg_id(8) + len(4) + constructor(4) + nonce(16)
-    if len(resp) < 40 or resp[:8] != b"\x00" * 8:
-        return None
-    if struct.unpack("<I", resp[20:24])[0] != 0x05162463:   # resPQ
-        return None
-    if resp[24:40] != nonce:
-        return None
-    return rtt
+        with socket.create_connection((ip, 443), timeout=TIMEOUT) as raw:
+            # SNI 用伪装域名，Host 用真实域名
+            with ctx.wrap_socket(raw, server_hostname=FRONT_SNI) as s:
+                s.settimeout(TIMEOUT)
+                s.sendall(req)
+                head = s.recv(1024)
+        ms = (time.perf_counter() - t) * 1000
+        if b" 101 " in head.split(b"\r\n")[0] + b" ":
+            return ms
+    except (OSError, ssl.SSLError):
+        pass
+    return None
 
 
 def check(ip):
-    v = [m for m in (mtproto_probe(ip) for _ in range(TRIES)) if m is not None]
-    return (min(v), ip) if v else None
+    res = []
+    for n in range(1, 6):
+        v = [m for m in (ws_probe(ip, n) for _ in range(2)) if m is not None]
+        if v:
+            res.append((n, min(v), ip))
+    return res
 
 
 def main():
-    if not os.path.exists(IN_FILE):
-        sys.exit(f"找不到 {IN_FILE}，请先运行 find_fast_dc.py")
     ips = [l.strip() for l in open(IN_FILE) if l.strip()]
-    print(f">>> 检查 {len(ips)} 个 IP 是否为 MTProto DC 入口 ...")
+    print(f">>> SNI={FRONT_SNI}，探测 {len(ips)} 个 IP ...")
     with ThreadPoolExecutor(max_workers=WORKERS) as ex:
-        ok = sorted(r for r in ex.map(check, ips) if r)
+        rows = [r for rs in ex.map(check, ips) for r in rs]
+    rows.sort(key=lambda r: (r[0], r[1]))
 
     with open(OUT_FILE, "w") as f:
-        for ms, ip in ok:
-            f.write(f"{ms:.0f}ms\t{ip}\n")
+        for n, ms, ip in rows:
+            f.write(f"{n}\t{ms:.0f}ms\t{ip}\n")
 
-    print(f">>> 其中 {len(ok)} 个是 DC 入口（已写入 {OUT_FILE}）:")
-    for ms, ip in ok:
-        print(f"  {ms:6.0f}ms  {ip}")
+    if not rows:
+        print("仍然没有通过的 IP")
+        return
+    print(">>> 每个 DC 延迟最低的 IP:")
+    seen = set()
+    for n, ms, ip in rows:
+        if n not in seen:
+            seen.add(n)
+            print(f"  --dc-ip {n}:{ip}    ({ms:.0f}ms)")
 
 
 if __name__ == "__main__":
